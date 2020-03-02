@@ -200,6 +200,10 @@ class Tree {
     leaf_value_[0] = val;
   }
 
+  inline void SetLeafCount(int leaf_idx, data_size_t cnt) {
+    leaf_count_[leaf_idx] = cnt;
+  }
+
   /*! \brief Serialize this object to string*/
   std::string ToString() const;
 

@@ -242,10 +242,57 @@ void DataParallelTreeLearner<TREELEARNER_T>::FindBestSplitsFromHistograms(const 
 template <typename TREELEARNER_T>
 void DataParallelTreeLearner<TREELEARNER_T>::Split(Tree* tree, int best_Leaf, int* left_leaf, int* right_leaf) {
   TREELEARNER_T::Split(tree, best_Leaf, left_leaf, right_leaf);
-  const SplitInfo& best_split_info = this->best_split_per_leaf_[best_Leaf];
+  SplitInfo& best_split_info = this->best_split_per_leaf_[best_Leaf];
+
+  std::pair<data_size_t, data_size_t> data(best_split_info.left_count,
+                                           best_split_info.right_count);
+  int size = sizeof(data);
+  std::memcpy(input_buffer_.data(), &data, size);
+  // global sumup reduce
+  Network::Allreduce(
+      input_buffer_.data(), size, sizeof(std::pair<data_size_t, data_size_t>),
+      output_buffer_.data(),
+      [](const char *src, char *dst, int type_size, comm_size_t len) {
+        comm_size_t used_size = 0;
+        const std::pair<data_size_t, data_size_t> *p1;
+        std::pair<data_size_t, data_size_t> *p2;
+        while (used_size < len) {
+          p1 = reinterpret_cast<const std::pair<data_size_t, data_size_t> *>(
+              src);
+          p2 = reinterpret_cast<std::pair<data_size_t, data_size_t> *>(dst);
+          std::get<0>(*p2) = std::get<0>(*p2) + std::get<0>(*p1);
+          std::get<1>(*p2) = std::get<1>(*p2) + std::get<1>(*p1);
+          src += type_size;
+          dst += type_size;
+          used_size += type_size;
+        }
+      });
+  std::memcpy(reinterpret_cast<void *>(&data), output_buffer_.data(), size);
+  best_split_info.left_count = data.first;
+  best_split_info.right_count = data.second;
   // need update global number of data in leaf
   global_data_count_in_leaf_[*left_leaf] = best_split_info.left_count;
   global_data_count_in_leaf_[*right_leaf] = best_split_info.right_count;
+  tree->SetLeafCount(*left_leaf, best_split_info.left_count);
+  tree->SetLeafCount(*right_leaf, best_split_info.right_count);
+  // init the leaves that used on next iteration
+  if (best_split_info.left_count < best_split_info.right_count) {
+    CHECK_GT(best_split_info.left_count, 0);
+    smaller_leaf_splits_->Init(*left_leaf, data_partition_.get(),
+                               best_split_info.left_sum_gradient,
+                               best_split_info.left_sum_hessian);
+    larger_leaf_splits_->Init(*right_leaf, data_partition_.get(),
+                              best_split_info.right_sum_gradient,
+                              best_split_info.right_sum_hessian);
+  } else {
+    CHECK_GT(best_split_info.right_count, 0);
+    smaller_leaf_splits_->Init(*right_leaf, data_partition_.get(),
+                               best_split_info.right_sum_gradient,
+                               best_split_info.right_sum_hessian);
+    larger_leaf_splits_->Init(*left_leaf, data_partition_.get(),
+                              best_split_info.left_sum_gradient,
+                              best_split_info.left_sum_hessian);
+  }
 }
 
 // instantiate template classes, otherwise linker cannot find the code
