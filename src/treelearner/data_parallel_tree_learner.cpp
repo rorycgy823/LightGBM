@@ -278,18 +278,18 @@ void DataParallelTreeLearner<TREELEARNER_T>::Split(Tree* tree, int best_Leaf, in
   // init the leaves that used on next iteration
   if (best_split_info.left_count < best_split_info.right_count) {
     CHECK_GT(best_split_info.left_count, 0);
-    smaller_leaf_splits_->Init(*left_leaf, data_partition_.get(),
+    smaller_leaf_splits_->Init(*left_leaf, this->data_partition_.get(),
                                best_split_info.left_sum_gradient,
                                best_split_info.left_sum_hessian);
-    larger_leaf_splits_->Init(*right_leaf, data_partition_.get(),
+    larger_leaf_splits_->Init(*right_leaf, this->data_partition_.get(),
                               best_split_info.right_sum_gradient,
                               best_split_info.right_sum_hessian);
   } else {
     CHECK_GT(best_split_info.right_count, 0);
-    smaller_leaf_splits_->Init(*right_leaf, data_partition_.get(),
+    smaller_leaf_splits_->Init(*right_leaf, this->data_partition_.get(),
                                best_split_info.right_sum_gradient,
                                best_split_info.right_sum_hessian);
-    larger_leaf_splits_->Init(*left_leaf, data_partition_.get(),
+    larger_leaf_splits_->Init(*left_leaf, this->data_partition_.get(),
                               best_split_info.left_sum_gradient,
                               best_split_info.left_sum_hessian);
   }
